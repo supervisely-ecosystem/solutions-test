@@ -5,7 +5,21 @@ from email.message import EmailMessage
 from typing import List, Literal, Optional, Union
 
 import supervisely as sly
-from supervisely.app.widgets import Button, Icons, NotificationBox, SolutionCard
+from supervisely.app.widgets import (
+    Button,
+    CheckboxField,
+    Container,
+    Field,
+    Icons,
+    Input,
+    InputNumber,
+    NotificationBox,
+    SolutionCard,
+    Switch,
+    TextArea,
+    TimePicker,
+)
+from supervisely.app.widgets.dialog.dialog import Dialog
 from supervisely.solution.base_node import SolutionCardNode, SolutionElement
 
 # Common email domain → (SMTP host, port)
@@ -87,12 +101,14 @@ class SendEmailNode(SolutionElement):
             icon="zmdi zmdi-settings",
             plain=True,
             button_type="text",
+            button_size="mini",
         )
         self._history_btn = Button(
             "Notification History",
-            icon="zmdi zmdi-history",
+            icon="zmdi zmdi-format-subject",
             plain=True,
             button_type="text",
+            button_size="mini",
         )
 
         # @self._send_btn.click
@@ -104,6 +120,7 @@ class SendEmailNode(SolutionElement):
         self.subject = subject
         self._body = body
         self.to_addrs = target_addresses or self.creds.username  # Default to sender's email
+        self._modal_settings = {}
 
         # self.error_nofitication = NotificationBox(
         #     "Authentication Error",
@@ -112,10 +129,136 @@ class SendEmailNode(SolutionElement):
         #     box_type="error",
         # )
         # self.error_nofitication.hide()
+        self.settings_modal = self._init_settings_modal()
+        self.history_modal = self._init_history_modal()
+
+        @self._settings_btn.click
+        def settings_click_cb():
+            self.settings_modal.show()
+
+        self._history_btn.disable()
+
+        @self._history_btn.click
+        def history_click_cb():
+            self.history_modal.show()
 
         self.card = self._create_card()
         self.node = SolutionCardNode(content=self.card, x=x, y=y)
+        self.modals = [self.settings_modal, self.history_modal]
         super().__init__(*args, **kwargs)
+
+    def _init_history_modal(self):
+        history_modal = Dialog(
+            title="Notification History",
+            content=Container(
+                [
+                    Field(
+                        "History",
+                        "This feature is not implemented yet.",
+                    ),
+                ]
+            ),
+            size="tiny",
+        )
+        return history_modal
+
+    def _init_settings_modal(self):
+        """
+        Initializes the settings modal for the SendEmailNode.
+        """
+        # from supervisely.app.widgets import ElementTagsList
+
+        subject_input = Input(
+            "", 0, 300, placeholder="Enter email subject here...", type="textarea"
+        )
+        subject_input_field = Field(
+            subject_input, "Email Subject", "Configure the subject of the email notification."
+        )
+
+        body_input = TextArea(
+            placeholder="Enter email body here...",
+            rows=20,
+        )
+        body_input_field = Field(
+            body_input,
+            "Email Body",
+            "Configure the body of the email notification. Leave empty to use default.",
+        )
+        # @todo: separate widget
+        to_addrs_input = Input(
+            "",
+            0,
+            300,
+            placeholder="Enter recipient email addresses (comma-separated)...",
+            type="textarea",
+        )
+        to_addrs_input_field = Field(
+            to_addrs_input,
+            "Recipient Addresses",
+            "Configure the recipient email addresses. "
+            "You can specify multiple addresses separated by commas.",
+        )
+
+        run_daily_switch = Switch(False)
+        run_daily_time_picker = TimePicker("09:00")
+        run_daily_time_picker.disable()
+
+        @run_daily_switch.value_changed
+        def run_daily_switch_change_cb(is_on: bool):
+            if is_on:
+                run_daily_time_picker.enable()
+            else:
+                run_daily_time_picker.disable()
+
+        run_daily_field = Field(
+            Container([run_daily_switch, run_daily_time_picker]),
+            "Run Daily",
+            "Enable this to send email notifications daily at the specified time.",
+        )
+
+        run_after_comparison_switch = Switch(True)
+        run_after_comparison_switch_field = Field(
+            run_after_comparison_switch,
+            "Run After Comparison",
+            "Enable this to send email notifications after each comparison.",
+        )
+        apply_btn = Button(
+            "Apply",
+        )
+
+        def get_modal_settings():
+            """
+            Returns the current settings from the modal.
+            """
+            return {
+                "subject": subject_input.get_value(),
+                "body": body_input.get_value(),
+                "to_addrs": [
+                    addr.strip() for addr in to_addrs_input.value.split(",") if addr.strip()
+                ],
+                "run_daily": run_daily_switch.is_on(),
+                "run_daily_time": run_daily_time_picker.get_value(),
+                "run_after_comparison": run_after_comparison_switch.is_on(),
+            }
+
+        @apply_btn.click
+        def modal_save_settings():
+            self._modal_settings = get_modal_settings()
+            self._update_properties()
+            self.settings_modal.hide()
+
+        modal_layout = Container(
+            [
+                subject_input_field,
+                body_input_field,
+                to_addrs_input_field,
+                run_daily_field,
+                run_after_comparison_switch_field,
+                apply_btn,
+            ]
+        )
+        settings_modal = Dialog("Notification Settings", content=modal_layout, size="tiny")
+        return settings_modal
 
     @property
     def body(self) -> str:
@@ -177,11 +320,11 @@ class SendEmailNode(SolutionElement):
         """
         return SolutionCard.Tooltip(
             description=self.description,
-            # content=[self._send_btn],
+            content=[self._settings_btn, self._history_btn],
             properties=[
                 {
                     "key": "Send",
-                    "value": "every day / after comparison",
+                    "value": "after comparison",
                     "link": False,
                     "highlight": True,
                 },
@@ -286,6 +429,54 @@ class SendEmailNode(SolutionElement):
         self.card.remove_badge_by_key(key="Failed")
         # self.error_nofitication.hide()
 
+    def show_automated_badge(self):
+        """
+        Updates the card to show that the comparison is automated.
+        """
+        self.card.update_badge_by_key(key="Automated", label="🤖", plain=True, badge_type="success")
+
+    def hide_automated_badge(self):
+        """
+        Hides the automated badge from the card.
+        """
+        self.card.remove_badge_by_key(key="Automated")
+
     # def set_error_notification(self, title, msg):
     #     self.error_nofitication.title = title
     #     self.error_nofitication.description = msg
+
+    def _update_properties(self):
+        m = self._modal_settings
+        use_daily = m.get("run_daily", False)
+        use_after_comparison = m.get("run_after_comparison", True)
+        send_value = None
+        if use_daily and use_after_comparison:
+            send_value = "every day / after comparison"
+        elif use_daily:
+            send_value = "every day"
+        elif use_after_comparison:
+            send_value = "after comparison"
+        else:
+            send_value = "never"
+        new_propetries = [
+            {
+                "key": "Send",
+                "value": send_value,
+                "link": False,
+                "highlight": True,
+            },
+            {
+                "key": "Total",
+                "value": "0 notifications",
+                "link": False,
+                "highlight": False,
+            },
+            {
+                "key": "Email",
+                "value": f"{self.creds.username}",
+                "link": True,
+                "highlight": False,
+            },
+        ]
+        for prop in new_propetries:
+            self.card.update_property(**prop)

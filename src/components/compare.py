@@ -5,7 +5,6 @@ from uuid import uuid4
 import supervisely as sly
 from supervisely.app.widgets import (
     Button,
-    Card,
     Container,
     Field,
     Icons,

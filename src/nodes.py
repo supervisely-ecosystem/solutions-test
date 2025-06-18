@@ -67,6 +67,7 @@ comparison_report = LinkNode(
     x=520,
     y=650,
     icon=Icons(class_name="zmdi zmdi-open-in-new", color="#FF00A6", bg_color="#FFBCED"),
+    tooltip_position="left",
 )
 comparison_report.node.disable()
 
@@ -79,10 +80,12 @@ email_creds = SendEmailNode.EmailCredentials(
     password=getenv("EMAIL_PASSWORD"),
 )
 
-send_email_desc = "Sends an email summary after model comparison is complete. "
-"Includes key details about the latest training process "
-"and comparison details to help decide on the next actions."
-send_email_node = SendEmailNode(email_creds, body="Hey!", description=send_email_desc, x=900, y=750)
+send_email_desc = (
+    "Sends an email summary after model comparison is complete. "
+    "Includes key details about the latest training process "
+    "and comparison details to help decide on the next actions."
+)
+send_email_node = SendEmailNode(email_creds, body="Hey!", description=send_email_desc, x=900, y=650)
 send_email_node.card.disable()
 
 
