@@ -7,6 +7,7 @@ from supervisely.solution.base_node import SolutionCardNode, SolutionElement
 
 
 class CompareNode(SolutionElement):
+
     APP_SLUG = "supervisely-ecosystem/model-benchmark"
     COMPARISON_ENDPOINT = "run_comparison"
 
@@ -26,6 +27,7 @@ class CompareNode(SolutionElement):
         *args,
         **kwargs,
     ):
+        """A node for comparing evaluation reports of different models in Supervisely."""
         self.api = api
         self.project = project_info
         self.team_id = project_info.team_id
@@ -33,7 +35,7 @@ class CompareNode(SolutionElement):
         self.title = title
         self.description = description
         self.width = width
-        self.icon = icon
+        self.icon = icon or self._get_default_icon()
         self.tooltip_position = tooltip_position
         self.eval_dirs = evaluation_dirs
 
@@ -66,6 +68,14 @@ class CompareNode(SolutionElement):
         self.show_warning = self.eval_dirs is None or len(self.eval_dirs) < 2
         if self.show_warning:
             self._run_btn.disable()
+
+        self.warning = NotificationBox(
+            "Not enough evaluation reports",
+            "Please select at least two evaluation reports to compare.",
+            box_type="warning",
+        )
+        if not self.show_warning:
+            self.warning.hide()
 
         self.failed_notification = NotificationBox(
             "Evaluation Failed",
@@ -100,6 +110,7 @@ class CompareNode(SolutionElement):
             self._run_btn.disable()
 
         self.show_warning = self.eval_dirs is None or len(self.eval_dirs) < 2
+        self.warning.show() if self.show_warning else self.warning.hide()
 
     def _create_card(self) -> SolutionCard:
         """
@@ -161,17 +172,6 @@ class CompareNode(SolutionElement):
 
         return task_id
 
-    def get_available_agent_id(self) -> int:
-        agents = self.api.agent.get_list_available(self.team_id, True)
-        return agents[0].id if agents else None
-
-    def on_finish(self, fn):
-        """
-        Decorator to register a callback to be called with result_dir when comparison finishes.
-        """
-        self._finish_callbacks.append(fn)
-        return fn
-
     def send_comparison_request(self, eval_folders_teamfiles: list[str]):
         """
         Sends a request to the backend to start the evaluation process.
@@ -198,6 +198,17 @@ class CompareNode(SolutionElement):
         except:
             sly.logger.error("Evaluation failed.", exc_info=True)
             self.show_failed_badge()
+
+    def get_available_agent_id(self) -> int:
+        agents = self.api.agent.get_list_available(self.team_id, True)
+        return agents[0].id if agents else None
+
+    def on_finish(self, fn):
+        """
+        Decorator to register a callback to be called with result_dir when comparison finishes.
+        """
+        self._finish_callbacks.append(fn)
+        return fn
 
     def _get_url_from_lnk_path(self, remote_lnk_path) -> str:
         if not self.api.file.exists(self.team_id, remote_lnk_path):
@@ -257,3 +268,29 @@ class CompareNode(SolutionElement):
         """
         self.card.remove_badge_by_key(key="Failed")
         self.failed_notification.hide()
+
+    def _get_default_icon(self) -> Icons:
+        icon_color, bg_color = self._random_pretty_color()
+        return Icons(
+            class_name="zmdi zmdi-compare",
+            color=icon_color,
+            bg_color=bg_color,
+        )
+
+    def _random_pretty_color(self) -> str:
+        import colorsys
+        import random
+
+        icon_color_hsv = (random.random(), random.uniform(0.5, 1.0), random.uniform(0.7, 1.0))
+        icon_color_rgb = colorsys.hsv_to_rgb(*icon_color_hsv)
+        icon_color_hex = "#{:02X}{:02X}{:02X}".format(*[int(c * 255) for c in icon_color_rgb])
+
+        bg_color_hsv = (
+            icon_color_hsv[0],
+            icon_color_hsv[1] * 0.3,
+            min(icon_color_hsv[2] + 0.3, 1.0),
+        )
+        bg_color_rgb = colorsys.hsv_to_rgb(*bg_color_hsv)
+        bg_color_hex = "#{:02X}{:02X}{:02X}".format(*[int(c * 255) for c in bg_color_rgb])
+
+        return icon_color_hex, bg_color_hex

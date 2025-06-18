@@ -91,13 +91,13 @@ class SendEmailNode(SolutionElement):
         self._body = body
         self.to_addrs = target_addresses or self.creds.username  # Default to sender's email
 
-        self.error_nofitication = NotificationBox(
-            "Authentication Error",
-            "Failed to authenticate with the provided email credentials. "
-            "Please check your username and password.",
-            box_type="error",
-        )
-        self.error_nofitication.hide()
+        # self.error_nofitication = NotificationBox(
+        #     "Authentication Error",
+        #     "Failed to authenticate with the provided email credentials. "
+        #     "Please check your username and password.",
+        #     box_type="error",
+        # )
+        # self.error_nofitication.hide()
 
         self.card = self._create_card()
         self.node = SolutionCardNode(content=self.card, x=x, y=y)
@@ -151,7 +151,7 @@ class SendEmailNode(SolutionElement):
         return SolutionCard(
             title=self.title,
             tooltip=self._create_tooltip(),
-            content=[self.error_nofitication],
+            # content=[self.error_nofitication],
             width=self.width,
             tooltip_position=self.tooltip_position,
             icon=self.icon,
@@ -204,10 +204,10 @@ class SendEmailNode(SolutionElement):
                 return
             except (smtplib.SMTPException, smtplib.SMTPServerDisconnected) as e:
                 sly.logger.error(f"Failed to send email: {e}", exc_info=False)
-                self.set_error_notification(
-                    title="Email Sending Error",
-                    msg=f"Failed to send email: {e}",
-                )
+                # self.set_error_notification(
+                #     title="Email Sending Error",
+                #     msg=f"Failed to send email: {e}",
+                # )
                 self.show_failed_badge()
                 return
             server.send_message(msg)
@@ -243,15 +243,15 @@ class SendEmailNode(SolutionElement):
         Updates the card to show that the evaluation has failed.
         """
         self.card.update_badge_by_key(key="Failed", label="❌", plain=True, badge_type="error")
-        self.error_nofitication.show()
+        # self.error_nofitication.show()
 
     def hide_failed_badge(self):
         """
         Hides the failed badge from the card.
         """
         self.card.remove_badge_by_key(key="Failed")
-        self.error_nofitication.hide()
+        # self.error_nofitication.hide()
 
-    def set_error_notification(self, title, msg):
-        self.error_nofitication.title = title
-        self.error_nofitication.description = msg
+    # def set_error_notification(self, title, msg):
+    #     self.error_nofitication.title = title
+    #     self.error_nofitication.description = msg

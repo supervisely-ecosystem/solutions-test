@@ -6,10 +6,6 @@ from supervisely.solution.base_node import SolutionCardNode, SolutionElement
 
 
 class EvaluationReportNode(SolutionElement):
-    """
-    Base class for nodes that can be used as links to external resources.
-    """
-
     def __init__(
         self,
         api: sly.Api,
@@ -26,6 +22,7 @@ class EvaluationReportNode(SolutionElement):
         *args,
         **kwargs,
     ):
+        """A node that displays a model evaluation report."""
         self.api = api
         self.project = project_info
         self.team_id = project_info.team_id
@@ -39,7 +36,7 @@ class EvaluationReportNode(SolutionElement):
         if self._benchmark_dir is None:
             raise ValueError("No valid benchmark directory found in the project.")
 
-        lnk_path = f"{self._benchmark_dir}visualizations/Model Evaluation Report.lnk"
+        lnk_path = f"{self._benchmark_dir.rstrip('/')}/visualizations/Model Evaluation Report.lnk"
         self.url = self._get_url_from_lnk_path(lnk_path)
         self.markdown_overview = self._get_overview_markdown() if display_overview else None
         self.card = self._create_card()
@@ -53,7 +50,6 @@ class EvaluationReportNode(SolutionElement):
         return SolutionCard(
             title=self.title,
             tooltip=self._create_tooltip(),
-            # content=None,
             width=self.width,
             tooltip_position=self.tooltip_position,
             link=self.url,

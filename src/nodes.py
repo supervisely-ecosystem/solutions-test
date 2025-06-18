@@ -49,10 +49,8 @@ compare = CompareNode(
     project_info=g.project,
     title="Compare Reports",
     description="Compare the evaluation results of different models.",
-    width=250,
     x=520,
     y=500,
-    icon=Icons(class_name="zmdi zmdi-compare", color="#1074FF", bg_color="#CEE3FF"),
     evaluation_dirs=[eval_1.benchmark_dir, eval_2.benchmark_dir],
 )
 comparison_result = LinkNode(
@@ -73,7 +71,7 @@ email_creds = SendEmailNode.EmailCredentials(
     username=getenv("EMAIL_USERNAME"),
     password=getenv("EMAIL_PASSWORD"),
 )
-send_email_node = SendEmailNode(email_creds, x=900, y=750)
+send_email_node = SendEmailNode(email_creds, body="Hey!", x=900, y=750)
 send_email_node.card.disable()
 
 
@@ -85,7 +83,7 @@ def on_finish_cb(result_dir, result_link):
         send_email_node.card.enable()
 
 
-graph_builder = sly.solution.SolutionGraphBuilder(height="1100px")
+graph_builder = sly.solution.SolutionGraphBuilder(height="1000px")
 
 training_charts = LinkNode(
     title="Training Charts",
@@ -97,7 +95,7 @@ training_charts = LinkNode(
 )
 
 checkpoint_folder = LinkNode(
-    title="Checkpoint Folder",
+    title="Checkpoints Folder",
     description="View the folder containing the model checkpoints.",
     link="",
     x=25,
