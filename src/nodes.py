@@ -1,10 +1,14 @@
+from os import getenv
+
 import supervisely as sly
+from dotenv import load_dotenv
 from supervisely.app.widgets import Icons
 from supervisely.solution import LinkNode
 
 import src.sly_globals as g
 from src.components.compare import CompareNode
 from src.components.evaluation_report import EvaluationReportNode
+from src.components.send_email import SendEmailNode
 
 input_project = sly.solution.ProjectNode(
     api=g.api,
@@ -40,22 +44,6 @@ eval_2 = EvaluationReportNode(
     y=350,
     icon=Icons(class_name="zmdi zmdi-open-in-new", color="#FF9100", bg_color="#FFE0BC"),
 )
-comparison_result = LinkNode(
-    title="Comparison Result",
-    description="View the comparison of the evaluation reports.",
-    link="",
-    x=520,
-    y=750,
-    icon=Icons(class_name="zmdi zmdi-open-in-new", color="#FF00A6", bg_color="#FFBCED"),
-)
-comparison_result.node.disable()
-
-
-def comparison_link_cb(link):
-    comparison_result.card.link = link
-    comparison_result.node.enable()
-
-
 compare = CompareNode(
     api=g.api,
     project_info=g.project,
@@ -63,11 +51,19 @@ compare = CompareNode(
     description="Compare the evaluation results of different models.",
     width=250,
     x=520,
-    y=600,
+    y=500,
     icon=Icons(class_name="zmdi zmdi-compare", color="#1074FF", bg_color="#CEE3FF"),
     evaluation_dirs=[eval_1.benchmark_dir, eval_2.benchmark_dir],
-    comparison_link_cb=comparison_link_cb,
 )
+comparison_result = LinkNode(
+    title="Comparison Result",
+    description="View the comparison of the evaluation reports.",
+    link="",
+    x=520,
+    y=650,
+    icon=Icons(class_name="zmdi zmdi-open-in-new", color="#FF00A6", bg_color="#FFBCED"),
+)
+comparison_result.node.disable()
 
 
 @compare.on_finish
@@ -77,6 +73,17 @@ def on_finish_cb(result_dir, result_link):
         comparison_result.node.enable()
 
 
+if sly.is_development():
+    load_dotenv("secrets.env")
+
+email_creds = SendEmailNode.EmailCredentials(
+    username=getenv("EMAIL_USERNAME"),
+    password=getenv("EMAIL_PASSWORD"),
+)
+send_email_node = SendEmailNode(
+    email_creds, body="Hey, bastard!", target_addresses="germ.vorozhko@gmail.com", x=900, y=750
+)
+
 graph_builder = sly.solution.SolutionGraphBuilder(height="1100px")
 
 # * Add nodes to the graph
@@ -85,6 +92,7 @@ graph_builder.add_node(eval_1)
 graph_builder.add_node(eval_2)
 graph_builder.add_node(compare)
 graph_builder.add_node(comparison_result)
+graph_builder.add_node(send_email_node)
 
 # * Add edges between nodes
 graph_builder.add_edge(
@@ -108,6 +116,14 @@ graph_builder.add_edge(
     compare,
     comparison_result,
     path="grid",
+)
+graph_builder.add_edge(
+    comparison_result,
+    send_email_node,
+    start_socket="right",
+    end_socket="left",
+    path="fluid",
+    dash=True,
 )
 
 # * Build the layout

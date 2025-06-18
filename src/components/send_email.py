@@ -5,7 +5,7 @@ from email.message import EmailMessage
 from typing import List, Literal, Optional, Union
 
 import supervisely as sly
-from supervisely.app.widgets import Button, Icons, SolutionCard
+from supervisely.app.widgets import Button, Icons, NotificationBox, SolutionCard
 from supervisely.solution.base_node import SolutionCardNode, SolutionElement
 
 # Common email domain → (SMTP host, port)
@@ -28,6 +28,8 @@ class SendEmailNode(SolutionElement):
             host: Optional[str] = None,
             port: Optional[int] = None,
         ):
+            if (not username or not password) or (username.strip() == "" or password.strip() == ""):
+                raise ValueError("Username and password must be provided.")
             self.username = username
             self.password = password
 
@@ -35,7 +37,7 @@ class SendEmailNode(SolutionElement):
             _host, _port = SMTP_PROVIDERS.get(domain, (None, None))
             self.host = host or _host
             self.port = port or _port
-            if not self.smtp_host or not self.smtp_port:
+            if not self.host or not self.port:
                 raise ValueError(
                     f"No SMTP settings found for domain '{domain}'. "
                     "Please pass smtp_host and smtp_port explicitly."
@@ -54,7 +56,7 @@ class SendEmailNode(SolutionElement):
         body: str = "",
         target_addresses: Union[str, List[str]] = None,
         title: str = "Send Email",
-        description: str = "Send an email notification via SMTP.",
+        description: str = "Send an email notification.",
         width: int = 250,
         x: int = 0,
         y: int = 0,
@@ -70,8 +72,6 @@ class SendEmailNode(SolutionElement):
         self.icon = icon or self._get_default_icon()
 
         self.tooltip_position = tooltip_position
-        self.card = self._create_card()
-        self.node = SolutionCardNode(content=self.card, x=x, y=y)
 
         self._send_btn = Button(
             "Send",
@@ -83,12 +83,24 @@ class SendEmailNode(SolutionElement):
 
         @self._send_btn.click
         def send_click_cb():
+            self.hide_finished_badge()
+            self.hide_failed_badge()
             self.send_email()
 
         self.subject = subject
         self._body = body
         self.to_addrs = target_addresses or self.creds.username  # Default to sender's email
 
+        self.error_nofitication = NotificationBox(
+            "Authentication Error",
+            "Failed to authenticate with the provided email credentials. "
+            "Please check your username and password.",
+            box_type="error",
+        )
+        self.error_nofitication.hide()
+
+        self.card = self._create_card()
+        self.node = SolutionCardNode(content=self.card, x=x, y=y)
         super().__init__(*args, **kwargs)
 
     @property
@@ -139,6 +151,7 @@ class SendEmailNode(SolutionElement):
         return SolutionCard(
             title=self.title,
             tooltip=self._create_tooltip(),
+            content=[self.error_nofitication],
             width=self.width,
             tooltip_position=self.tooltip_position,
             icon=self.icon,
@@ -183,6 +196,62 @@ class SendEmailNode(SolutionElement):
             server.ehlo()
             server.starttls()
             server.ehlo()
-            server.login(self.creds.username, self.creds.password)
+            try:
+                server.login(self.creds.username, self.creds.password)
+            except smtplib.SMTPAuthenticationError:
+                sly.logger.error("Failed to authenticate with the provided email credentials.")
+                self.show_failed_badge()
+                return
+            except (smtplib.SMTPException, smtplib.SMTPServerDisconnected) as e:
+                sly.logger.error(f"Failed to send email: {e}", exc_info=False)
+                self.set_error_notification(
+                    title="Email Sending Error",
+                    msg=f"Failed to send email: {e}",
+                )
+                self.show_failed_badge()
+                return
             server.send_message(msg)
+            self.show_finished_badge()
             sly.logger.info(f"Email sent to {self.to_addrs}")
+
+    def show_finished_badge(self):
+        """
+        Updates the card to show that the evaluation is finished.
+        """
+        self.card.update_badge_by_key(key="Finished", label="✅", plain=True, badge_type="success")
+
+    def hide_finished_badge(self):
+        """
+        Hides the finished badge from the card.
+        """
+        self.card.remove_badge_by_key(key="Finished")
+
+    def show_running_badge(self):
+        """
+        Updates the card to show that the evaluation is running.
+        """
+        self.card.update_badge_by_key(key="Sending", label="⚡", plain=True, badge_type="warning")
+
+    def hide_running_badge(self):
+        """
+        Hides the running badge from the card.
+        """
+        self.card.remove_badge_by_key(key="Sending")
+
+    def show_failed_badge(self):
+        """
+        Updates the card to show that the evaluation has failed.
+        """
+        self.card.update_badge_by_key(key="Failed", label="❌", plain=True, badge_type="error")
+        self.error_nofitication.show()
+
+    def hide_failed_badge(self):
+        """
+        Hides the failed badge from the card.
+        """
+        self.card.remove_badge_by_key(key="Failed")
+        self.error_nofitication.hide()
+
+    def set_error_notification(self, title, msg):
+        self.error_nofitication.title = title
+        self.error_nofitication.description = msg
