@@ -66,13 +66,6 @@ comparison_result = LinkNode(
 comparison_result.node.disable()
 
 
-@compare.on_finish
-def on_finish_cb(result_dir, result_link):
-    if result_link:
-        comparison_result.card.link = result_link
-        comparison_result.node.enable()
-
-
 if sly.is_development():
     load_dotenv("secrets.env")
 
@@ -80,11 +73,37 @@ email_creds = SendEmailNode.EmailCredentials(
     username=getenv("EMAIL_USERNAME"),
     password=getenv("EMAIL_PASSWORD"),
 )
-send_email_node = SendEmailNode(
-    email_creds, body="Hey, bastard!", target_addresses="germ.vorozhko@gmail.com", x=900, y=750
-)
+send_email_node = SendEmailNode(email_creds, x=900, y=750)
+send_email_node.card.disable()
+
+
+@compare.on_finish
+def on_finish_cb(result_dir, result_link):
+    if result_link:
+        comparison_result.card.link = result_link
+        comparison_result.node.enable()
+        send_email_node.card.enable()
+
 
 graph_builder = sly.solution.SolutionGraphBuilder(height="1100px")
+
+training_charts = LinkNode(
+    title="Training Charts",
+    description="View the training charts of the model.",
+    link="",
+    x=25,
+    y=105,
+    icon=Icons(class_name="zmdi zmdi-chart"),
+)
+
+checkpoint_folder = LinkNode(
+    title="Checkpoint Folder",
+    description="View the folder containing the model checkpoints.",
+    link="",
+    x=25,
+    y=205,
+    icon=Icons(class_name="zmdi zmdi-folder"),
+)
 
 # * Add nodes to the graph
 graph_builder.add_node(input_project)
@@ -93,6 +112,8 @@ graph_builder.add_node(eval_2)
 graph_builder.add_node(compare)
 graph_builder.add_node(comparison_result)
 graph_builder.add_node(send_email_node)
+graph_builder.add_node(training_charts)
+graph_builder.add_node(checkpoint_folder)
 
 # * Add edges between nodes
 graph_builder.add_edge(
@@ -124,6 +145,20 @@ graph_builder.add_edge(
     end_socket="left",
     path="fluid",
     dash=True,
+)
+graph_builder.add_edge(
+    input_project,
+    training_charts,
+    start_socket="left",
+    end_socket="right",
+    # path="grid",
+)
+graph_builder.add_edge(
+    input_project,
+    checkpoint_folder,
+    start_socket="left",
+    end_socket="right",
+    # path="grid",
 )
 
 # * Build the layout
