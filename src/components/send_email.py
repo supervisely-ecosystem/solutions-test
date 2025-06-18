@@ -73,19 +73,33 @@ class SendEmailNode(SolutionElement):
 
         self.tooltip_position = tooltip_position
 
-        self._send_btn = Button(
-            "Send",
-            icon="zmdi zmdi-play",
-            button_size="mini",
+        # self._send_btn = Button(
+        #     "Send",
+        #     icon="zmdi zmdi-play",
+        #     button_size="mini",
+        #     plain=True,
+        #     button_type="text",
+        # )
+
+        # @ todo change to appropriate icons
+        self._settings_btn = Button(
+            "Notifications Settings",
+            icon="zmdi zmdi-settings",
+            plain=True,
+            button_type="text",
+        )
+        self._history_btn = Button(
+            "Notification History",
+            icon="zmdi zmdi-history",
             plain=True,
             button_type="text",
         )
 
-        @self._send_btn.click
-        def send_click_cb():
-            self.hide_finished_badge()
-            self.hide_failed_badge()
-            self.send_email()
+        # @self._send_btn.click
+        # def send_click_cb():
+        #     self.hide_finished_badge()
+        #     self.hide_failed_badge()
+        #     self.send_email()
 
         self.subject = subject
         self._body = body
@@ -163,7 +177,27 @@ class SendEmailNode(SolutionElement):
         """
         return SolutionCard.Tooltip(
             description=self.description,
-            content=[self._send_btn],
+            # content=[self._send_btn],
+            properties=[
+                {
+                    "key": "Send",
+                    "value": "every day / after comparison",
+                    "link": False,
+                    "highlight": True,
+                },
+                {
+                    "key": "Total",
+                    "value": "0 notifications",
+                    "link": False,
+                    "highlight": False,
+                },
+                {
+                    "key": "Email",
+                    "value": f"{self.creds.username}",
+                    "link": True,
+                    "highlight": False,
+                },
+            ],
         )
 
     def send_email(
