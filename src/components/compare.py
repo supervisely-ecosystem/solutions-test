@@ -308,6 +308,7 @@ class CompareNode(SolutionElement):
         self.warning.hide()
         self.hide_failed_badge()
         self.hide_running_badge()
+        self.hide_finished_badge()
         if not self.eval_dirs or len(self.eval_dirs) < 2:
             sly.logger.warning("Not enough evaluation directories provided for comparison.")
             self.show_failed_badge()
@@ -435,14 +436,14 @@ class CompareNode(SolutionElement):
         import colorsys
         import random
 
-        icon_color_hsv = (random.random(), random.uniform(0.5, 1.0), random.uniform(0.7, 1.0))
+        icon_color_hsv = (random.random(), random.uniform(0.6, 0.9), random.uniform(0.4, 0.7))
         icon_color_rgb = colorsys.hsv_to_rgb(*icon_color_hsv)
         icon_color_hex = "#{:02X}{:02X}{:02X}".format(*[int(c * 255) for c in icon_color_rgb])
 
         bg_color_hsv = (
             icon_color_hsv[0],
             icon_color_hsv[1] * 0.3,
-            min(icon_color_hsv[2] + 0.3, 1.0),
+            min(icon_color_hsv[2] + 0.4, 1.0),
         )
         bg_color_rgb = colorsys.hsv_to_rgb(*bg_color_hsv)
         bg_color_hex = "#{:02X}{:02X}{:02X}".format(*[int(c * 255) for c in bg_color_rgb])

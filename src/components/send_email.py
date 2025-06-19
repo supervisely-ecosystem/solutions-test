@@ -5,6 +5,7 @@ from email.message import EmailMessage
 from typing import List, Literal, Optional, Union
 
 import supervisely as sly
+from apscheduler.triggers.cron import CronTrigger
 from supervisely.app.widgets import (
     Button,
     CheckboxField,
@@ -21,6 +22,7 @@ from supervisely.app.widgets import (
 )
 from supervisely.app.widgets.dialog.dialog import Dialog
 from supervisely.solution.base_node import SolutionCardNode, SolutionElement
+from supervisely.solution.scheduler import TasksScheduler
 
 # Common email domain → (SMTP host, port)
 SMTP_PROVIDERS = {
@@ -87,6 +89,8 @@ class SendEmailNode(SolutionElement):
 
         self.tooltip_position = tooltip_position
 
+        self.task_scheduler = TasksScheduler()
+
         # self._send_btn = Button(
         #     "Send",
         #     icon="zmdi zmdi-play",
@@ -117,6 +121,8 @@ class SendEmailNode(SolutionElement):
         #     self.hide_failed_badge()
         #     self.send_email()
 
+        self._run_after_comparison = False
+
         self.subject = subject
         self._body = body
         self.to_addrs = target_addresses or self.creds.username  # Default to sender's email
@@ -146,6 +152,22 @@ class SendEmailNode(SolutionElement):
         self.node = SolutionCardNode(content=self.card, x=x, y=y)
         self.modals = [self.settings_modal, self.history_modal]
         super().__init__(*args, **kwargs)
+
+    @property
+    def run_after_comparison(self) -> bool:
+        """
+        Returns whether the email should be sent after each comparison.
+        """
+        return self._run_after_comparison
+
+    @run_after_comparison.setter
+    def run_after_comparison(self, value: bool) -> None:
+        """
+        Sets whether the email should be sent after each comparison.
+        """
+        if not isinstance(value, bool):
+            raise ValueError("run_after_comparison must be a boolean value.")
+        self._run_after_comparison = value
 
     def _init_history_modal(self):
         history_modal = Dialog(
@@ -231,11 +253,12 @@ class SendEmailNode(SolutionElement):
             Returns the current settings from the modal.
             """
             return {
-                "subject": subject_input.get_value(),
-                "body": body_input.get_value(),
+                "subject": subject_input.get_value() or None,
+                "body": body_input.get_value().strip() or None,
                 "to_addrs": [
-                    addr.strip() for addr in to_addrs_input.value.split(",") if addr.strip()
-                ],
+                    addr.strip() for addr in to_addrs_input.get_value().split(",") if addr.strip()
+                ]
+                or None,
                 "run_daily": run_daily_switch.is_on(),
                 "run_daily_time": run_daily_time_picker.get_value(),
                 "run_after_comparison": run_after_comparison_switch.is_on(),
@@ -244,7 +267,18 @@ class SendEmailNode(SolutionElement):
         @apply_btn.click
         def modal_save_settings():
             self._modal_settings = get_modal_settings()
+            self.run_after_comparison = self._modal_settings.get("run_after_comparison", False)
+            run_daily = self._modal_settings.get("run_daily", False)
+            if run_daily or self.run_after_comparison:
+                self.show_automated_badge()
+            else:
+                self.hide_automated_badge()
+
+            self.subject = self._modal_settings.get("subject", "Supervisely Notification")
+            self.body = self._modal_settings.get("body", "")
+            self.to_addrs = self._modal_settings.get("to_addrs", self.creds.username)
             self._update_properties()
+            self.update_scheduler()
             self.settings_modal.hide()
 
         modal_layout = Container(
@@ -287,14 +321,14 @@ class SendEmailNode(SolutionElement):
         import colorsys
         import random
 
-        icon_color_hsv = (random.random(), random.uniform(0.5, 1.0), random.uniform(0.7, 1.0))
+        icon_color_hsv = (random.random(), random.uniform(0.6, 0.9), random.uniform(0.4, 0.7))
         icon_color_rgb = colorsys.hsv_to_rgb(*icon_color_hsv)
         icon_color_hex = "#{:02X}{:02X}{:02X}".format(*[int(c * 255) for c in icon_color_rgb])
 
         bg_color_hsv = (
             icon_color_hsv[0],
             icon_color_hsv[1] * 0.3,
-            min(icon_color_hsv[2] + 0.3, 1.0),
+            min(icon_color_hsv[2] + 0.4, 1.0),
         )
         bg_color_rgb = colorsys.hsv_to_rgb(*bg_color_hsv)
         bg_color_hex = "#{:02X}{:02X}{:02X}".format(*[int(c * 255) for c in bg_color_rgb])
@@ -352,6 +386,9 @@ class SendEmailNode(SolutionElement):
         Send an email via SMTP. If smtp_host/port are not provided,
         they will be inferred from the username's email domain using SMTP_PROVIDERS.
         """
+        self.hide_finished_badge()
+        self.hide_failed_badge()
+        self.show_running_badge()
 
         msg = EmailMessage()
         msg["Subject"] = self.subject
@@ -377,6 +414,7 @@ class SendEmailNode(SolutionElement):
                 server.login(self.creds.username, self.creds.password)
             except smtplib.SMTPAuthenticationError:
                 sly.logger.error("Failed to authenticate with the provided email credentials.")
+                self.hide_running_badge()
                 self.show_failed_badge()
                 return
             except (smtplib.SMTPException, smtplib.SMTPServerDisconnected) as e:
@@ -385,9 +423,11 @@ class SendEmailNode(SolutionElement):
                 #     title="Email Sending Error",
                 #     msg=f"Failed to send email: {e}",
                 # )
+                self.hide_running_badge()
                 self.show_failed_badge()
                 return
             server.send_message(msg)
+            self.hide_running_badge()
             self.show_finished_badge()
             sly.logger.info(f"Email sent to {self.to_addrs}")
 
@@ -480,3 +520,26 @@ class SendEmailNode(SolutionElement):
         ]
         for prop in new_propetries:
             self.card.update_property(**prop)
+
+    def update_scheduler(self):
+        if not self._modal_settings:
+            return
+
+        m = self._modal_settings
+        use_daily = m.get("run_daily", False)
+        if not use_daily:
+            self.task_scheduler.remove_task("send_email_daily")
+
+        time = m.get("run_daily_time", "09:00")
+        hour, minute = map(int, time.split(":"))
+        tigger = CronTrigger(hour=hour, minute=minute, second=0)
+        job = self.task_scheduler.scheduler.add_job(
+            self.send_email,
+            tigger,
+            id="send_email_daily",
+            replace_existing=True,
+        )
+        self.task_scheduler.jobs[job.id] = job
+        sly.logger.info(
+            f"[SCHEDULER]: Job '{job.id}' scheduled to send emails at {time} every day."
+        )

@@ -86,7 +86,6 @@ send_email_desc = (
     "and comparison details to help decide on the next actions."
 )
 send_email_node = SendEmailNode(email_creds, body="Hey!", description=send_email_desc, x=900, y=650)
-send_email_node.card.disable()
 
 
 @compare.on_finish
@@ -94,10 +93,11 @@ def on_finish_cb(result_dir, result_link):
     if result_link:
         comparison_report.card.link = result_link
         comparison_report.node.enable()
-        send_email_node.card.enable()
+        if send_email_node.run_after_comparison is True:
+            send_email_node.send_email()
 
 
-graph_builder = sly.solution.SolutionGraphBuilder(height="1000px")
+graph_builder = sly.solution.SolutionGraphBuilder(height="800px")
 
 training_charts = LinkNode(
     title="Training Charts",
